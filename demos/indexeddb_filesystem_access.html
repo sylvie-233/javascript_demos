@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>本地目录权限 Demo</title>
+<style>
+  body { font-family: sans-serif; margin: 30px; }
+  button { margin: 5px; padding: 8px 14px; }
+  .section { border: 1px solid #ccc; padding: 10px; margin-top: 15px; border-radius: 8px; }
+  .file-list { margin-top: 10px; font-size: 14px; color: #444; }
+</style>
+</head>
+<body>
+
+<h2>浏览器本地目录权限 Demo</h2>
+<p>使用 <code>File System Access API + IndexedDB</code> 持久化目录权限。</p>
+
+<div class="section">
+  <h3>目录绑定 A</h3>
+  <button onclick="bindDir('A')">绑定目录 A</button>
+  <button onclick="listFiles('A')">列出文件</button>
+  <button onclick="writeFile('A')">写入文件</button>
+  <div id="statusA" class="file-list">未绑定</div>
+</div>
+
+<div class="section">
+  <h3>目录绑定 B</h3>
+  <button onclick="bindDir('B')">绑定目录 B</button>
+  <button onclick="listFiles('B')">列出文件</button>
+  <button onclick="writeFile('B')">写入文件</button>
+  <div id="statusB" class="file-list">未绑定</div>
+</div>
+
+<script>
+// IndexedDB数据库名
+const DB_NAME = 'fs-handles-db';
+// IndexedDB表名
+const STORE = 'handles';
+
+// 打开DB_NAME数据库
+function openDB() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(DB_NAME, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+
+// DB_NAME数据库STORE表中存值（把对应目录文件的handle存进去）
+async function idbPut(key, val) {
+  const db = await openDB();
+  const tx = db.transaction(STORE, 'readwrite');
+  tx.objectStore(STORE).put(val, key);
+  return tx.complete;
+}
+
+// DB_NAME数据库STORE表中取值
+async function idbGet(key) {
+  const db = await openDB();
+  return new Promise((res, rej) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).get(key);
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+
+/**
+ * === 权限处理 ===
+ */ 
+async function verifyPermission(handle, withRequest = false) {
+  const opts = { mode: 'readwrite' };
+  // 查询是否具有权限
+  const state = await handle.queryPermission(opts);
+  if (state === 'granted') return true;
+  // 重新申请权限
+  if (withRequest && (await handle.requestPermission(opts)) === 'granted')
+    return true;
+  return false;
+}
+
+// === 绑定目录 ===
+async function bindDir(key) {
+  try {
+    const dir = await window.showDirectoryPicker();
+    const ok = await verifyPermission(dir, true);
+    if (!ok) return alert('未授予权限');
+    await idbPut(key, dir);
+    document.getElementById('status' + key).innerText = `✅ 已绑定: ${dir.name}`;
+  } catch (err) {
+    console.error(err);
+    alert('绑定失败: ' + err.message);
+  }
+}
+
+// === 恢复目录 ===
+async function restoreDir(key) {
+  const handle = await idbGet(key);
+  if (!handle) return null;
+  // 第一次：仅查询，不弹窗
+  if (await verifyPermission(handle, false)) return handle;
+  // 第二次：查询不行 -> 主动弹窗请求授权
+  if (await verifyPermission(handle, true)) return handle;
+  return null;
+}
+
+// === 列出文件 ===
+async function listFiles(key) {
+  const dir = await restoreDir(key);
+  if (!dir) return alert('未绑定或无权限');
+  const list = [];
+  for await (const [name, handle] of dir.entries()) {
+    list.push(handle.kind === 'file' ? name : name + '/');
+  }
+  document.getElementById('status' + key).innerText =
+    list.length ? list.join('\n') : '(空目录)';
+}
+
+// === 写文件 ===
+async function writeFile(key) {
+  const dir = await restoreDir(key);
+  if (!dir) return alert('未绑定或无权限');
+  const fileHandle = await dir.getFileHandle(`demo_${Date.now()}.txt`, { create: true });
+  const writable = await fileHandle.createWritable();
+  await writable.write(`Hello! 文件写入时间: ${new Date().toLocaleString()}`);
+  await writable.close();
+  alert('✅ 文件写入成功');
+  listFiles(key);
+}
+
+// === 页面加载时恢复绑定 ===
+window.addEventListener('DOMContentLoaded', async () => {
+  console.log("恢复加载")
+  for (const key of ['A', 'B']) {
+    const handle = await restoreDir(key);
+    if (handle) {
+      document.getElementById('status' + key).innerText = `✅ 已绑定: ${handle.name}`;
+    }
+  }
+});
+</script>
+</body>
+</html>
