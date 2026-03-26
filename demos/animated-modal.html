@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Animated Modal (Enhanced)</title>
+<style>
+  body {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(120deg, #89f7fe, #66a6ff);
+    font-family: Arial, sans-serif;
+  }
+
+  button {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 10px;
+    background: white;
+    cursor: pointer;
+    font-weight: bold;
+    transition: 0.2s;
+  }
+
+  button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+  }
+
+  .overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.4);
+    display: flex;
+    justify-content: center; 
+    align-items: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: 0.3s;
+  }
+
+  .overlay.show {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .modal {
+    width: 320px;
+    padding: 20px;
+    border-radius: 16px;
+    background: white;
+    transform: scale(0.7);
+    transition: 0.3s;
+  }
+
+  .overlay.show .modal {
+    transform: scale(1);
+  }
+
+  .modal h3 {
+    margin-top: 0;
+  }
+
+  .close {
+    float: right;
+    cursor: pointer;
+    font-size: 18px;
+  }
+</style>
+</head>
+<body>
+
+<button onclick="showModal({title:'提示', content:'这是一个升级版 Modal'})">打开弹窗</button>
+
+<div id="overlay" class="overlay" onclick="closeModal(event)">
+  <div class="modal">
+    <span class="close" onclick="closeModal()">×</span>
+    <h3 id="modalTitle"></h3>
+    <p id="modalContent"></p>
+  </div>
+</div>
+
+<script>
+const overlay = document.getElementById('overlay');
+const titleEl = document.getElementById('modalTitle');
+const contentEl = document.getElementById('modalContent');
+
+// 打开 Modal（通用方法）
+function showModal({ title = '标题', content = '内容' }) {
+  titleEl.textContent = title;
+  contentEl.textContent = content;
+
+  overlay.classList.add('show');
+  document.body.style.overflow = 'hidden'; // 禁止滚动
+}
+
+// 关闭 Modal
+function closeModal(e) {
+  if (!e || e.target === overlay) {
+    overlay.classList.remove('show');
+    document.body.style.overflow = ''; // 恢复滚动
+  }
+}
+
+// ESC 关闭
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeModal();
+  }
+});
+</script>
+
+</body>
+</html>
