@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Glass Login</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      font-family: "Segoe UI", sans-serif;
+    }
+
+    .card {
+      width: 320px;
+      padding: 30px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+      color: white;
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .input-group {
+      margin-bottom: 15px;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      outline: none;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      background: #ffffff;
+      color: #333;
+      cursor: pointer;
+      transition: 0.3s;
+      font-weight: bold;
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    }
+
+    .msg {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 14px;
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>登录</h2>
+
+  <div class="input-group">
+    <input id="username" placeholder="用户名">
+  </div>
+
+  <div class="input-group">
+    <input id="password" type="password" placeholder="密码">
+  </div>
+
+  <button onclick="login()">登录</button>
+
+  <button onclick="clearForm()" style="margin-top:10px;background:transparent;color:white;border:1px solid rgba(255,255,255,0.6);">
+    清空
+  </button>
+
+  <div id="msg" class="msg"></div>
+</div>
+
+<script>
+function login() {
+  const u = document.getElementById('username').value;
+  const p = document.getElementById('password').value;
+  const msg = document.getElementById('msg');
+
+  if (!u || !p) {
+    msg.textContent = '请输入用户名和密码';
+    return;
+  }
+
+  msg.textContent = '登录中...';
+
+  setTimeout(() => {
+    msg.textContent = '登录成功（模拟）';
+  }, 800);
+}
+function clearForm() {
+  document.getElementById('username').value = '';
+  document.getElementById('password').value = '';
+  document.getElementById('msg').textContent = '';
+}
+</script>
+
+</body>
+</html>
