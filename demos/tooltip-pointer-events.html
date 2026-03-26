@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Tooltip Pointer Events</title>
+<style>
+  body {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(135deg, #1e3c72, #2a5298);
+    font-family: Arial, sans-serif;
+    color: white;
+  }
+
+  .wrapper {
+    position: relative;
+    display: inline-block;
+  }
+
+  .btn {
+    padding: 12px 20px;
+    border-radius: 10px;
+    background: white;
+    color: #333;
+    cursor: pointer;
+    font-weight: bold;
+  }
+
+  .tooltip {
+    position: absolute;
+    bottom: 130%;
+    left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.8);
+    font-size: 12px;
+    white-space: nowrap;
+
+    opacity: 0;
+    transition: 0.25s;
+
+    pointer-events: none; /* 关键：允许点击穿透 */
+  }
+
+  .wrapper:hover .tooltip {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  .tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 6px;
+    border-style: solid;
+    border-color: rgba(0,0,0,0.8) transparent transparent transparent;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrapper">
+  <div class="btn">悬浮我</div>
+  <div class="tooltip">这是一个不会挡点击的 Tooltip</div>
+</div>
+
+</body>
+</html>
