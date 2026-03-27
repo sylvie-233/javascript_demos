@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Tabs Component</title>
+<style>
+  body {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(135deg, #ff9a9e, #fad0c4);
+    font-family: Arial, sans-serif;
+  }
+
+  .tabs {
+    width: 400px;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+    overflow: hidden;
+  }
+
+  .tab-headers {
+    display: flex;
+    border-bottom: 1px solid #eee;
+  }
+
+  .tab {
+    flex: 1;
+    text-align: center;
+    padding: 12px;
+    cursor: pointer;
+    transition: 0.3s;
+  }
+
+  .tab.active {
+    background: #ff758c;
+    color: white;
+    font-weight: bold;
+  }
+
+  .tab-content {
+    padding: 20px;
+    min-height: 120px;
+  }
+</style>
+</head>
+<body>
+
+<div class="tabs">
+  <div class="tab-headers">
+    <div class="tab active" data-tab="1">首页</div>
+    <div class="tab" data-tab="2">数据</div>
+    <div class="tab" data-tab="3">设置</div>
+  </div>
+
+  <div class="tab-content" id="content">
+    这里是首页内容
+  </div>
+</div>
+
+<script>
+const tabs = document.querySelectorAll('.tab');
+const content = document.getElementById('content');
+
+const data = {
+  1: '这里是首页内容',
+  2: '这里是数据内容',
+  3: '这里是设置内容'
+};
+
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    tabs.forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+
+    const key = tab.dataset.tab;
+    content.textContent = data[key];
+  });
+});
+</script>
+
+</body>
+</html>
