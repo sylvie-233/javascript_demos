@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>ACM Leaderboard</title>
+<style>
+  body {
+    margin: 0;
+    padding: 40px;
+    background: linear-gradient(135deg, #1f4037, #99f2c8);
+    font-family: Arial;
+  }
+
+  .board {
+    width: 420px;
+    margin: auto;
+    background: white;
+    border-radius: 16px;
+    padding: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  }
+
+  .item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px;
+    margin: 6px 0;
+    border-radius: 10px;
+    background: #f5f5f5;
+    transition: transform 0.4s ease;
+    gap: 8px;
+  }
+
+  .left {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex: 1;
+  }
+
+  .rank { font-weight: bold; }
+
+  .actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  .btn {
+    border: none;
+    border-radius: 6px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+
+  .up { background: #4CAF50; color: white; }
+  .down { background: #f44336; color: white; }
+
+  button.main {
+    display: block;
+    margin: 20px auto;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<div class="board" id="board"></div>
+<button class="main" onclick="shuffle()">随机排名变化</button>
+
+<script>
+let data = [
+  { id: 1, name: 'Alice', score: 100 },
+  { id: 2, name: 'Bob', score: 90 },
+  { id: 3, name: 'Cathy', score: 80 },
+  { id: 4, name: 'David', score: 70 }
+];
+
+const board = document.getElementById('board');
+
+function render() {
+  board.innerHTML = '';
+  data.forEach((item, index) => {
+    const div = document.createElement('div');
+    div.className = 'item';
+    div.dataset.id = item.id;
+
+    div.innerHTML = `
+      <div class="left">
+        <span class="rank">#${index + 1}</span>
+        <span>${item.name}</span>
+        <span>${item.score}</span>
+      </div>
+      <div class="actions">
+        <button class="btn up">▲</button>
+        <button class="btn down">▼</button>
+      </div>
+    `;
+
+    // 绑定按钮事件
+    const [upBtn, downBtn] = div.querySelectorAll('button');
+
+    upBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      changeScore(item.id, 10);
+    });
+
+    downBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      changeScore(item.id, -10);
+    });
+
+    board.appendChild(div);
+  });
+}
+
+function changeScore(id, delta) {
+  // 记录旧位置
+  const oldMap = new Map();
+  document.querySelectorAll('.item').forEach(el => {
+    oldMap.set(el.dataset.id, el.getBoundingClientRect().top);
+  });
+
+  // 更新分数
+  const target = data.find(d => d.id == id);
+  target.score += delta;
+
+  // 排序
+  data.sort((a, b) => b.score - a.score);
+
+  // 重新渲染
+  render();
+
+  // FLIP 动画
+  document.querySelectorAll('.item').forEach(el => {
+    const id = el.dataset.id;
+    const oldTop = oldMap.get(id);
+    const newTop = el.getBoundingClientRect().top;
+    const diff = oldTop - newTop;
+
+    if (diff) {
+      el.style.transform = `translateY(${diff}px)`;
+      el.style.transition = 'none';
+
+      requestAnimationFrame(() => {
+        el.style.transition = 'transform 0.4s ease';
+        el.style.transform = '';
+      });
+    }
+  });
+}
+
+function shuffle() {
+  // 记录旧位置
+  const oldMap = new Map();
+  document.querySelectorAll('.item').forEach(el => {
+    oldMap.set(el.dataset.id, el.getBoundingClientRect().top);
+  });
+
+  // 随机变化分数
+  data.forEach(d => {
+    d.score += Math.floor(Math.random() * 30 - 15);
+  });
+
+  // 排序
+  data.sort((a, b) => b.score - a.score);
+
+  // 重新渲染
+  render();
+
+  // FLIP 动画（和 changeScore 一样逻辑）
+  document.querySelectorAll('.item').forEach(el => {
+    const id = el.dataset.id;
+    const oldTop = oldMap.get(id);
+    const newTop = el.getBoundingClientRect().top;
+    const diff = oldTop - newTop;
+
+    if (diff) {
+      el.style.transform = `translateY(${diff}px)`;
+      el.style.transition = 'none';
+
+      requestAnimationFrame(() => {
+        el.style.transition = 'transform 0.4s ease';
+        el.style.transform = '';
+      });
+    }
+  });
+
+  data.sort((a, b) => b.score - a.score);
+  changeScore(null, 0); // 复用动画
+}
+
+render();
+</script>
+
+</body>
+</html>
