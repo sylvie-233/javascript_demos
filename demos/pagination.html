@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Pagination</title>
+<style>
+  body {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(135deg, #f6d365, #fda085);
+    font-family: Arial, sans-serif;
+  }
+
+  .pagination {
+    display: flex;
+    gap: 6px;
+    background: white;
+    padding: 10px;
+    border-radius: 12px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+  }
+
+  .page {
+    min-width: 32px;
+    height: 32px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: 0.2s;
+  }
+
+  .page:hover {
+    background: #f0f0f0;
+  }
+
+  .page.active {
+    background: #ff7a18;
+    color: white;
+    font-weight: bold;
+  }
+
+  .page.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+</style>
+</head>
+<body>
+
+<div class="pagination" id="pagination"></div>
+
+<script>
+const container = document.getElementById('pagination');
+
+let current = 1;
+const total = 10;
+
+function render() {
+  container.innerHTML = '';
+
+  // prev
+  const prev = createPage('‹', current === 1, () => {
+    if (current > 1) current--;
+    render();
+  });
+  container.appendChild(prev);
+
+  for (let i = 1; i <= total; i++) {
+    const page = createPage(i, false, () => {
+      current = i;
+      render();
+    });
+
+    if (i === current) {
+      page.classList.add('active');
+    }
+
+    container.appendChild(page);
+  }
+
+  // next
+  const next = createPage('›', current === total, () => {
+    if (current < total) current++;
+    render();
+  });
+  container.appendChild(next);
+}
+
+function createPage(text, disabled, onClick) {
+  const div = document.createElement('div');
+  div.className = 'page';
+  div.textContent = text;
+
+  if (disabled) {
+    div.classList.add('disabled');
+  } else {
+    div.addEventListener('click', onClick);
+  }
+
+  return div;
+}
+
+render();
+</script>
+
+</body>
+</html>
