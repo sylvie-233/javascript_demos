@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
+    <title>无限头条 · 优雅下拉刷新 + 无限加载</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+            background: #f5f7fb;
+            color: #1e293b;
+            line-height: 1.5;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 顶部导航栏 (固定不动) */
+        .app-header {
+            flex-shrink: 0;
+            position: relative;
+            z-index: 20;
+            background: rgba(255, 255, 255, 0.96);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid #e2e8f0;
+            padding: 12px 20px;
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .logo {
+            font-size: 1.7rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            letter-spacing: -0.3px;
+        }
+
+        .badge {
+            font-size: 0.75rem;
+            background: #eef2ff;
+            padding: 4px 10px;
+            border-radius: 40px;
+            color: #1e40af;
+            font-weight: 500;
+        }
+
+        /* 滚动容器 — 负责滚动，内部包裹下拉刷新区域 */
+        .scroll-container {
+            flex: 1;
+            overflow-y: auto;
+            position: relative;
+            -webkit-overflow-scrolling: touch;
+            scroll-behavior: smooth;
+        }
+
+        /* 下拉刷新包装器：整个内容区会跟随下拉偏移 */
+        .pull-refresh-wrapper {
+            min-height: 100%;
+            transform: translateY(0px);
+            transition: transform 0.2s ease-out;
+            will-change: transform;
+        }
+
+        /* 下拉刷新指示器 - 默认完全透明且不占空间 (不显示) */
+        .refresh-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 0px 0 0px;
+            background: transparent;
+            color: #5b6e8c;
+            font-size: 0.85rem;
+            font-weight: 500;
+            opacity: 0;
+            transform: scale(0.95);
+            transition: opacity 0.15s ease, transform 0.2s ease;
+            height: 0;
+            overflow: hidden;
+            visibility: hidden;
+        }
+        
+        /* 下拉中或显示刷新状态时，指示器可见 */
+        .refresh-indicator.visible {
+            visibility: visible;
+            height: auto;
+            padding: 16px 0 12px;
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .refresh-icon {
+            font-size: 1.3rem;
+            transition: transform 0.2s;
+        }
+
+        .refresh-text {
+            letter-spacing: 0.3px;
+        }
+
+        /* 加载动画旋转 */
+        .spin {
+            animation: rotateRefresh 0.7s linear infinite;
+        }
+
+        @keyframes rotateRefresh {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* 新闻列表容器 */
+        .news-feed {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 0 16px 32px;
+            background: #f5f7fb;
+        }
+
+        /* 新闻卡片样式 */
+        .news-card {
+            background: white;
+            border-radius: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.03);
+            transition: all 0.2s ease;
+            overflow: hidden;
+            border: 1px solid #edf2f7;
+        }
+
+        .card-content {
+            padding: 20px 20px 18px;
+        }
+
+        .news-category {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #3b82f6;
+            background: #eff6ff;
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 30px;
+            margin-bottom: 12px;
+        }
+
+        .news-title {
+            font-size: 1.35rem;
+            font-weight: 700;
+            line-height: 1.35;
+            margin-bottom: 12px;
+            color: #0f172a;
+        }
+
+        .news-summary {
+            font-size: 0.9rem;
+            color: #334155;
+            margin-bottom: 16px;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .news-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem;
+            color: #64748b;
+            border-top: 1px solid #f0f2f5;
+            padding-top: 14px;
+            margin-top: 4px;
+        }
+
+        .time::before {
+            content: "🕘";
+            margin-right: 4px;
+        }
+
+        .stats {
+            display: flex;
+            gap: 14px;
+        }
+
+        .stats span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* 加载更多指示器 (无限滚动) */
+        .loading-trigger {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 24px 16px 32px;
+        }
+
+        .loader {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid #e2e8f0;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            font-size: 0.85rem;
+            color: #5b6e8c;
+            font-weight: 500;
+        }
+
+        .end-message {
+            text-align: center;
+            padding: 32px 20px 40px;
+            color: #94a3b8;
+            font-size: 0.85rem;
+            border-top: 1px solid #eef2ff;
+            margin-top: 8px;
+        }
+
+        /* 骨架屏 */
+        .skeleton-card {
+            background: white;
+            border-radius: 24px;
+            margin-bottom: 20px;
+            padding: 20px;
+            border: 1px solid #edf2f7;
+        }
+
+        .skeleton-line {
+            background: linear-gradient(90deg, #f0f2f5 25%, #e9edf2 50%, #f0f2f5 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.2s infinite;
+            border-radius: 12px;
+            margin-bottom: 12px;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        .skeleton-title {
+            height: 28px;
+            width: 85%;
+            margin-bottom: 16px;
+        }
+
+        .skeleton-text {
+            height: 16px;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .skeleton-text.short {
+            width: 60%;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        @media (max-width: 560px) {
+            .news-feed {
+                padding: 0 12px 32px;
+            }
+            .news-title {
+                font-size: 1.2rem;
+            }
+            .card-content {
+                padding: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-header">
+    <div class="logo">📰 无限头条</div>
+    <div class="badge">优雅下拉 · 无限加载</div>
+</div>
+
+<div class="scroll-container" id="scrollContainer">
+    <!-- 整个下拉刷新区域，通过 transform 跟随手指下拉 -->
+    <div class="pull-refresh-wrapper" id="pullWrapper">
+        <!-- 下拉刷新指示器 - 默认隐藏，仅下拉时显示 -->
+        <div class="refresh-indicator" id="refreshIndicator">
+            <div class="refresh-icon" id="refreshIcon">👇</div>
+            <div class="refresh-text" id="refreshText">下拉刷新</div>
+        </div>
+        
+        <!-- 新闻列表主内容 -->
+        <div class="news-feed" id="newsFeedContainer">
+            <div id="newsList" class="news-list"></div>
+            <!-- 无限滚动哨兵 -->
+            <div id="loadMoreSentinel" class="loading-trigger">
+                <div class="loader" id="loaderIndicator">
+                    <div class="spinner"></div>
+                    <div class="loading-text">正在加载新鲜事...</div>
+                </div>
+                <div id="endMessage" class="end-message hidden">✨ 已经到底啦 ~ 共加载完所有新闻 ✨</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ---------- 模拟新闻数据生成器 (丰富内容，支持无限分页) ----------
+    const CATEGORIES = ["科技前沿", "深度报道", "设计灵感", "AI 动态", "全球视野", "商业洞察", "文化漫谈", "绿色未来"];
+    const TITLES = [
+        "AI 重塑内容创作：新一代大模型突破上下文限制", 
+        "告别卡顿：无限滚动最佳实践与性能优化", 
+        "从零到一：打造沉浸式新闻阅读体验", 
+        "Web 3.0 时代的内容分发革命", 
+        "设计师喜欢的极简主义UI趋势", 
+        "边缘计算如何让App加载更快", 
+        "2026 年互联网就业风向标", 
+        "这款无限加载组件，月 PV 破千万", 
+        "响应式布局进阶：容器查询实战", 
+        "前端架构演进：微前端与模块联邦", 
+        "智能推荐算法背后的故事", 
+        "绿色数字产品：低碳网页设计指南"
+    ];
+    const SUMMARY_BASE = [
+        "最新研究显示，用户对流畅加载的耐心只有 0.5 秒，无限滚动巧妙解决了内容续航问题。",
+        "结合 Intersection Observer，实现高性能滚动加载，资源占用降低 40%。",
+        "本文深度分析现代新闻聚合平台的交互设计，卡片式布局深受用户喜爱。",
+        "通过模拟异步请求，我们可以构造出接近原生应用的加载体验。",
+        "后疫情时代，数字新闻消费增长迅猛，个性化推荐成为主流。",
+        "探索前沿科技如何改变媒体行业，带来全新阅读模式。",
+        "无限分页不仅用于新闻，在电商、社交流中同样不可或缺。",
+        "今日分享: 优雅处理加载状态及骨架屏策略，提升用户感知性能。"
+    ];
+
+    function getRandomTimeAgo() {
+        const randomHours = Math.floor(Math.random() * 48);
+        if (randomHours < 1) {
+            const minutes = Math.floor(Math.random() * 59) + 1;
+            return `${minutes}分钟前`;
+        } else if (randomHours < 24) {
+            return `${randomHours}小时前`;
+        } else {
+            const days = Math.floor(randomHours / 24);
+            return `${days}天前`;
+        }
+    }
+
+    function getRandomStats() {
+        const views = Math.floor(Math.random() * 8000) + 200;
+        const likes = Math.floor(Math.random() * views * 0.2) + 10;
+        return { views, likes };
+    }
+
+    // 列表元素全局id
+    let globalId = 0;
+    // 列表元素生成
+    function generateNewsItem(pageToken = 1) {
+        globalId++;
+        const category = CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
+        let title = TITLES[Math.floor(Math.random() * TITLES.length)];
+        if (pageToken > 1) title = title + ` · 新视角${pageToken}`;
+        const finalTitle = title;
+        const summary = SUMMARY_BASE[Math.floor(Math.random() * SUMMARY_BASE.length)] + " 持续观察发现，用户体验与内容生态深度融合是未来方向。";
+        const timeAgo = getRandomTimeAgo();
+        const { views, likes } = getRandomStats();
+        return {
+            id: globalId,
+            category,
+            title: finalTitle,
+            summary: summary.slice(0, 135) + (summary.length > 135 ? "…" : ""),
+            time: timeAgo,
+            views: views.toLocaleString(),
+            likes: likes.toLocaleString(),
+        };
+    }
+
+    // 模拟分页配置 (总共6页，每页6~10条)
+    const TOTAL_PAGES = 6;
+    let currentPage = 0;          // 已加载页数
+    let isLoadingMore = false;     // 无限加载锁
+    let hasMore = true;
+    let allNewsItems = [];          // 存储所有已加载新闻（用于刷新重置）
+    
+    // 下拉刷新相关变量
+    let isRefreshing = false;
+    let startY = 0;
+    let currentTranslateY = 0;
+    let pullStartY = 0;
+    let isPulling = false;
+    const PULL_THRESHOLD = 65;      // 下拉超过65px触发刷新
+    const MAX_PULL_DISTANCE = 90;   // 最大下拉距离
+    
+    // DOM 元素
+    const scrollContainer = document.getElementById('scrollContainer');
+    const pullWrapper = document.getElementById('pullWrapper');
+    const refreshIndicator = document.getElementById('refreshIndicator');
+    const refreshIcon = document.getElementById('refreshIcon');
+    const refreshText = document.getElementById('refreshText');
+    
+    // 辅助函数
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
+
+    // 渲染新闻列表 (追加或替换)
+    function renderNewsItems(items, append = true) {
+        const newsListContainer = document.getElementById('newsList');
+        if (!append) {
+            newsListContainer.innerHTML = '';
+        }
+        const fragment = document.createDocumentFragment();
+        items.forEach(item => {
+            const card = document.createElement('article');
+            card.className = 'news-card';
+            card.innerHTML = `
+                <div class="card-content">
+                    <span class="news-category">${escapeHtml(item.category)}</span>
+                    <h2 class="news-title">${escapeHtml(item.title)}</h2>
+                    <p class="news-summary">${escapeHtml(item.summary)}</p>
+                    <div class="news-meta">
+                        <div class="time">${escapeHtml(item.time)}</div>
+                        <div class="stats">
+                            <span>👁️ ${escapeHtml(item.views)}</span>
+                            <span>❤️ ${escapeHtml(item.likes)}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            fragment.appendChild(card);
+        });
+        newsListContainer.appendChild(fragment);
+    }
+
+    // 模拟网络请求: 获取某一页数据
+    async function fetchNewsPage(pageNum) {
+        const delay = Math.floor(Math.random() * 500) + 400;
+        return new Promise((resolve) => {
+            setTimeout(() => {
+                if (pageNum > TOTAL_PAGES) {
+                    resolve([]);
+                    return;
+                }
+                const pageSize = Math.floor(Math.random() * 5) + 6; // 6~10条
+                const pageItems = [];
+                for (let i = 0; i < pageSize; i++) {
+                    pageItems.push(generateNewsItem(pageNum));
+                }
+                resolve(pageItems);
+            }, delay);
+        });
+    }
+
+    // 重置加载更多指示器状态
+    function resetLoaderToIdle() {
+        const loaderDiv = document.getElementById('loaderIndicator');
+        const spinnerElem = loaderDiv?.querySelector('.spinner');
+        const textElem = loaderDiv?.querySelector('.loading-text');
+        const endMsg = document.getElementById('endMessage');
+        if (!hasMore) {
+            if (loaderDiv) loaderDiv.classList.add('hidden');
+            if (endMsg) endMsg.classList.remove('hidden');
+            return;
+        }
+        if (spinnerElem) spinnerElem.style.display = 'none';
+        if (textElem) textElem.innerText = '↓ 向上滑动加载更多 ↓';
+        loaderDiv?.classList.remove('hidden');
+        if (endMsg) endMsg.classList.add('hidden');
+    }
+
+    function showLoaderSpinner() {
+        const loaderDiv = document.getElementById('loaderIndicator');
+        const spinnerElem = loaderDiv?.querySelector('.spinner');
+        const textElem = loaderDiv?.querySelector('.loading-text');
+        if (spinnerElem) spinnerElem.style.display = 'block';
+        if (textElem) textElem.innerText = '正在加载新鲜事...';
+        loaderDiv?.classList.remove('hidden');
+        document.getElementById('endMessage')?.classList.add('hidden');
+    }
+
+    // 加载下一页 (无限滚动)
+    async function loadNextPage() {
+        if (isLoadingMore) return;
+        if (!hasMore) return;
+        if (isRefreshing) return;
+        // 进入上拉加载状态
+        isLoadingMore = true;
+        showLoaderSpinner();
+        
+        const nextPage = currentPage + 1;
+        try {
+            const newItems = await fetchNewsPage(nextPage);
+            if (newItems.length === 0 || nextPage > TOTAL_PAGES) {
+                hasMore = false;
+                const loaderDiv = document.getElementById('loaderIndicator');
+                const endMsg = document.getElementById('endMessage');
+                if (loaderDiv) loaderDiv.classList.add('hidden');
+                if (endMsg) endMsg.classList.remove('hidden');
+                isLoadingMore = false;
+                return;
+            }
+            allNewsItems.push(...newItems);
+            renderNewsItems(newItems, true);
+            currentPage = nextPage;
+            if (currentPage >= TOTAL_PAGES) {
+                hasMore = false;
+                resetLoaderToIdle();
+            } else {
+                resetLoaderToIdle();
+            }
+        } catch (err) {
+            console.error(err);
+            const textElem = document.querySelector('#loaderIndicator .loading-text');
+            if (textElem) textElem.innerText = '加载失败，轻触重试';
+            setTimeout(() => resetLoaderToIdle(), 1500);
+        } finally {
+            // 退出上拉加载状态
+            isLoadingMore = false;
+        }
+    }
+
+    // 显示指示器 (带动画)
+    function showRefreshIndicator() {
+        refreshIndicator.classList.add('visible');
+    }
+    
+    // 隐藏指示器
+    function hideRefreshIndicator() {
+        refreshIndicator.classList.remove('visible');
+    }
+
+    // 刷新整个新闻流 (微信小程序风格下拉刷新)
+    async function performRefresh() {
+        if (isRefreshing) return;
+        // 进入下拉刷新状态
+        isRefreshing = true;
+        
+        // 更新指示器UI为刷新中状态，并确保可见
+        refreshIcon.innerHTML = '⏳';
+        refreshText.innerHTML = '刷新中...';
+        refreshIcon.classList.add('spin');
+        showRefreshIndicator();
+        
+        // 重置全局ID，让新数据全新生成
+        globalId = 0;
+        // 显示骨架屏让体验更平滑
+        const newsContainer = document.getElementById('newsList');
+        newsContainer.innerHTML = `
+            <div class="skeleton-card"><div class="skeleton-line skeleton-title"></div><div class="skeleton-line skeleton-text"></div><div class="skeleton-line skeleton-text short"></div></div>
+            <div class="skeleton-card"><div class="skeleton-line skeleton-title"></div><div class="skeleton-line skeleton-text"></div><div class="skeleton-line skeleton-text"></div></div>
+            <div class="skeleton-card"><div class="skeleton-line skeleton-title"></div><div class="skeleton-line skeleton-text"></div><div class="skeleton-line skeleton-text short"></div></div>
+            <div class="skeleton-card"><div class="skeleton-line skeleton-title"></div><div class="skeleton-line skeleton-text"></div><div class="skeleton-line skeleton-text short"></div></div>
+            <div class="skeleton-card"><div class="skeleton-line skeleton-title"></div><div class="skeleton-line skeleton-text"></div><div class="skeleton-line skeleton-text short"></div></div>
+        `;
+        
+        try {
+            // 模拟刷新网络请求
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            const freshFirstPage = await fetchNewsPage(1);
+            if (freshFirstPage.length === 0) {
+                newsContainer.innerHTML = '<div style="padding:40px;text-align:center">暂无新闻，请稍后再试</div>';
+                hasMore = true;
+                currentPage = 0;
+                allNewsItems = [];
+            } else {
+                // 重置分页状态
+                currentPage = 1;
+                hasMore = (TOTAL_PAGES > 1);
+                allNewsItems = [...freshFirstPage];
+                newsContainer.innerHTML = '';
+                renderNewsItems(freshFirstPage, false);
+            }
+            resetLoaderToIdle();
+            if (currentPage >= TOTAL_PAGES) {
+                hasMore = false;
+                resetLoaderToIdle();
+            }
+        } catch (err) {
+            console.warn("刷新失败", err);
+            if (allNewsItems.length === 0) {
+                document.getElementById('newsList').innerHTML = '<div style="padding:40px;text-align:center">刷新失败，下拉重试</div>';
+            }
+        } finally {
+            // 退出下拉刷新状态
+            isRefreshing = false;
+            // 刷新完成，重置指示器图标和文字
+            refreshIcon.innerHTML = '✓';
+            refreshText.innerHTML = '刷新完成';
+            refreshIcon.classList.remove('spin');
+            // 延迟恢复Wrapper位置和隐藏指示器
+            setTimeout(() => {
+                if (pullWrapper) {
+                    // 位置复原
+                    pullWrapper.style.transform = 'translateY(0px)';
+                    pullWrapper.style.transition = 'transform 0.25s ease-out';
+                }
+                setTimeout(() => {
+                    // 完全隐藏指示器
+                    hideRefreshIndicator();
+                    refreshIcon.innerHTML = '👇';
+                    refreshText.innerHTML = '下拉刷新';
+                    if (pullWrapper) pullWrapper.style.transition = '';
+                }, 200);
+            }, 200);
+        }
+    }
+
+    // ---------- 优雅下拉刷新：指示器默认隐藏，下拉时动态显示并整体移动列表 ----------
+    function initElegantPullToRefresh() {
+        let touchStartY = 0;
+        let initialTranslate = 0;
+        let isDragging = false;
+        let startScrollTop = 0;
+        
+        // isDragging -> isPulling -> isRefreshing
+        scrollContainer.addEventListener('touchstart', (e) => {
+            if (isRefreshing) return;
+            // 只在滚动容器顶部 (scrollTop === 0) 时才启用下拉手势
+            if (scrollContainer.scrollTop === 0) {
+                touchStartY = e.touches[0].clientY;
+                startScrollTop = scrollContainer.scrollTop;
+                // 进入拖拽状态
+                isDragging = true;
+                initialTranslate = 0;
+                // 清除之前的transition避免冲突
+                pullWrapper.style.transition = '';
+            }
+        }, { passive: false });
+        
+        scrollContainer.addEventListener('touchmove', (e) => {
+            // 非拖拽状态 或 下拉刷新状态中 不处理
+            if (!isDragging || isRefreshing) return;
+            const currentY = e.touches[0].clientY;
+            let diff = currentY - touchStartY;
+            // 只有向下拉并且 scrollTop 仍然为0的时候才处理下拉位移
+            if (diff > 0 && scrollContainer.scrollTop === 0) {
+                e.preventDefault();   // 阻止原生滚动，实现整体下拉效果
+                // 限制最大下拉距离
+                let translateY = Math.min(diff, MAX_PULL_DISTANCE);
+                currentTranslateY = translateY;
+                // 通过translateY实现位移
+                pullWrapper.style.transform = `translateY(${translateY}px)`;
+                
+                // 根据下拉距离动态显示指示器（当下拉超过 8px 时开始淡入）
+                if (translateY > 8) {
+                    if (!refreshIndicator.classList.contains('visible')) {
+                        showRefreshIndicator();
+                    }
+                    // 根据下拉进度更新指示器样式
+                    if (translateY >= PULL_THRESHOLD) {
+                        refreshIcon.innerHTML = '🔄';
+                        refreshText.innerHTML = '释放刷新';
+                        refreshIcon.classList.add('spin');
+                    } else {
+                        refreshIcon.innerHTML = '👇';
+                        refreshText.innerHTML = '下拉刷新';
+                        refreshIcon.classList.remove('spin');
+                    }
+                } else if (translateY <= 8) {
+                    // 下拉距离很小，隐藏指示器
+                    hideRefreshIndicator();
+                }
+                // 进入下拉状态
+                isPulling = true;
+            } else if (diff > 0 && scrollContainer.scrollTop > 0) {
+                // 不在顶部时，不处理下拉，但需要重置状态并隐藏指示器
+                if (pullWrapper.style.transform !== 'translateY(0px)') {
+                    pullWrapper.style.transform = 'translateY(0px)';
+                }
+                if (refreshIndicator.classList.contains('visible')) {
+                    hideRefreshIndicator();
+                }
+                // 清除拖拽状态
+                isDragging = false;
+            } else if (diff <= 0) {
+                // 上拉不做特殊处理，但可以隐藏指示器（如果之前显示着）
+                if (refreshIndicator.classList.contains('visible') && !isRefreshing) {
+                    hideRefreshIndicator();
+                }
+            }
+        }, { passive: false });
+        
+        scrollContainer.addEventListener('touchend', async (e) => {
+            if (!isDragging || isRefreshing) {
+                // 重置transform并隐藏指示器
+                if (pullWrapper.style.transform !== 'translateY(0px)') {
+                    pullWrapper.style.transition = 'transform 0.2s ease-out';
+                    pullWrapper.style.transform = 'translateY(0px)';
+                    setTimeout(() => { pullWrapper.style.transition = ''; }, 250);
+                }
+                if (refreshIndicator.classList.contains('visible')) {
+                    hideRefreshIndicator();
+                }
+                isDragging = false;
+                isPulling = false;
+                // 重置指示器图标和文字
+                refreshIcon.innerHTML = '👇';
+                refreshText.innerHTML = '下拉刷新';
+                refreshIcon.classList.remove('spin');
+                return;
+            }
+            
+            if (currentTranslateY >= PULL_THRESHOLD) {
+                // 触发刷新，保持指示器可见并显示刷新状态
+                pullWrapper.style.transition = 'transform 0.2s ease-out';
+                pullWrapper.style.transform = 'translateY(52px)'; // 停留在刷新位置
+                await performRefresh();
+                // 刷新完成后已经在performRefresh里重置transform并隐藏指示器
+            } else {
+                // 未达到阈值，回弹并隐藏指示器
+                pullWrapper.style.transition = 'transform 0.25s ease-out';
+                pullWrapper.style.transform = 'translateY(0px)';
+                hideRefreshIndicator();
+                refreshIcon.innerHTML = '👇';
+                refreshText.innerHTML = '下拉刷新';
+                refreshIcon.classList.remove('spin');
+            }
+            isDragging = false;
+            isPulling = false;
+            currentTranslateY = 0;
+            setTimeout(() => {
+                if (pullWrapper.style.transition) pullWrapper.style.transition = '';
+            }, 300);
+        });
+    }
+    
+    // Intersection Observer 无限滚动 (底部哨兵)
+    let observer = null;
+    function initInfiniteScroll() {
+        const sentinel = document.getElementById('loadMoreSentinel');
+        if (!sentinel) return;
+        observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting && hasMore && !isLoadingMore && !isRefreshing) {
+                    loadNextPage();
+                }
+            });
+        }, {
+            root: scrollContainer,
+            rootMargin: '0px 0px 120px 0px',
+            threshold: 0.1
+        });
+        observer.observe(sentinel);
+    }
+    
+    // 初始化应用
+    async function initializeApp() {
+        globalId = 0;
+        currentPage = 0;
+        hasMore = true;
+        isLoadingMore = false;
+        allNewsItems = [];
+        const newsContainer = document.getElementById('newsList');
+        newsContainer.innerHTML = `
+            <div class="skeleton-card"><div class="skeleton-line skeleton-title"></div><div class="skeleton-line skeleton-text"></div><div class="skeleton-line skeleton-text short"></div></div>
+            <div class="skeleton-card"><div class="skeleton-line skeleton-title"></div><div class="skeleton-line skeleton-text"></div><div class="skeleton-line skeleton-text"></div></div>
+            <div class="skeleton-card"><div class="skeleton-line skeleton-title"></div><div class="skeleton-line skeleton-text"></div><div class="skeleton-line skeleton-text short"></div></div>
+            <div class="skeleton-card"><div class="skeleton-line skeleton-title"></div><div class="skeleton-line skeleton-text"></div><div class="skeleton-line skeleton-text short"></div></div>
+            <div class="skeleton-card"><div class="skeleton-line skeleton-title"></div><div class="skeleton-line skeleton-text"></div><div class="skeleton-line skeleton-text short"></div></div>
+        `;
+        
+        const firstPage = await fetchNewsPage(1);
+        newsContainer.innerHTML = '';
+        if (firstPage.length) {
+            renderNewsItems(firstPage, false);
+            allNewsItems = [...firstPage];
+            currentPage = 1;
+            hasMore = (TOTAL_PAGES > 1);
+        } else {
+            newsContainer.innerHTML = '<div style="padding:40px;text-align:center">暂无新闻内容</div>';
+            hasMore = false;
+        }
+        resetLoaderToIdle();
+        // 确保指示器初始隐藏
+        hideRefreshIndicator();
+        initElegantPullToRefresh();
+        initInfiniteScroll();
+    }
+    
+    initializeApp().catch(e => {
+        console.error(e);
+        document.getElementById('newsList').innerHTML = '<div style="padding:40px;text-align:center">⚠️ 初始化出错，请刷新页面</div>';
+    });
+</script>
+</body>
+</html>
