@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>聊天页面 App版</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    /* 解决 iOS 100vh 问题 */
+    .safe-h {
+      height: 100dvh;
+    }
+
+    /* 安全区适配（刘海屏） */
+    .safe-top {
+      padding-top: env(safe-area-inset-top);
+    }
+
+    .safe-bottom {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  </style>
+</head>
+
+<body class="bg-gray-100">
+
+  <div class="safe-h flex flex-col">
+
+    <!-- 顶部栏 -->
+    <div class="bg-green-500 text-white p-4 safe-top flex items-center">
+      <span class="text-lg font-semibold">好友昵称</span>
+    </div>
+
+    <!-- 聊天区 -->
+    <div id="chatBox"
+      class="flex-1 overflow-y-auto p-3 space-y-3">
+
+    </div>
+
+    <!-- 输入区 -->
+    <div class="bg-white border-t p-2 flex items-center safe-bottom">
+      <input id="inputMsg"
+        type="text"
+        placeholder="输入消息..."
+        class="flex-1 border rounded-full px-4 py-2 outline-none text-sm"
+      />
+      <button onclick="sendMsg()"
+        class="ml-2 bg-green-500 text-white px-4 py-2 rounded-full text-sm">
+        发送
+      </button>
+    </div>
+
+  </div>
+
+  <script>
+    const chatBox = document.getElementById("chatBox");
+    const input = document.getElementById("inputMsg");
+
+    function scrollToBottom() {
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function createMyMsg(text) {
+      return `
+        <div class="flex justify-end items-end">
+          <div class="bg-green-500 text-white px-3 py-2 rounded-2xl max-w-[70%] break-words">
+            ${text}
+          </div>
+          <img src="https://i.pravatar.cc/40?img=8"
+               class="w-8 h-8 rounded-full ml-2">
+        </div>
+      `;
+    }
+
+    function createReplyMsg(text) {
+      return `
+        <div class="flex items-end">
+          <img src="https://i.pravatar.cc/40?img=3"
+               class="w-8 h-8 rounded-full mr-2">
+          <div class="bg-white px-3 py-2 rounded-2xl max-w-[70%] break-words">
+            ${text}
+          </div>
+        </div>
+      `;
+    }
+
+    function sendMsg() {
+      const text = input.value.trim();
+      if (!text) return;
+
+      chatBox.insertAdjacentHTML("beforeend", createMyMsg(text));
+      input.value = "";
+      scrollToBottom();
+
+      setTimeout(() => {
+        chatBox.insertAdjacentHTML("beforeend", createReplyMsg("收到：" + text));
+        scrollToBottom();
+      }, 600);
+    }
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        sendMsg();
+      }
+    });
+
+    // 👉 关键：输入框获取焦点时滚动到底（防键盘遮挡）
+    input.addEventListener("focus", () => {
+      setTimeout(scrollToBottom, 300);
+    });
+
+    // 初始化一些消息
+    for (let i = 1; i <= 8; i++) {
+      chatBox.insertAdjacentHTML("beforeend",
+        i % 2
+          ? createReplyMsg("测试消息 " + i)
+          : createMyMsg("我的消息 " + i)
+      );
+    }
+
+    scrollToBottom();
+  </script>
+
+</body>
+</html>
