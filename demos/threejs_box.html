@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Three.js 交互式 Demo - 乐高小花园</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        /* 提示信息样式，置于左上角 */
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 30px;
+            pointer-events: none; /* 让点击穿透，不影响3D操作 */
+            user-select: none;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            z-index: 100;
+        }
+        #info span {
+            display: inline-block;
+            background: #ffaa00;
+            color: #222;
+            padding: 0 10px;
+            border-radius: 12px;
+            margin-left: 8px;
+            font-weight: bold;
+        }
+        /* 右下角统计信息 */
+        #stats {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            color: #aaa;
+            background: rgba(0,0,0,0.5);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            pointer-events: none;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">🌱 点击地面或方块 <span>➕ 添加</span></div>
+    <div id="stats">🧱 方块数量: <span id="blockCount">0</span></div>
+
+    <!-- 引入 Three.js 核心库和扩展库 -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.128.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        // ----- 1. 导入所需模块 -----
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+        // ----- 2. 场景、相机、渲染器 -----
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x111122); // 深空蓝背景
+
+        // 透视相机: 视野75°, 宽高比自适应, 近裁面0.1, 远裁面1000
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(8, 6, 12);
+        camera.lookAt(0, 0, 0);
+
+        // WebGL渲染器
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true; // 开启阴影
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap; // 柔和阴影
+        document.body.appendChild(renderer.domElement);
+
+        // 轨道控制器 (允许用户拖拽/缩放)
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true; // 开启惯性效果
+        controls.dampingFactor = 0.05;
+        controls.screenSpacePanning = true;
+        controls.maxPolarAngle = Math.PI / 2.3; // 限制俯视角度，避免看到地底
+        controls.target.set(0, 1, 0);
+
+        // ----- 3. 灯光 -----
+        // 环境光: 提供基础照明
+        const ambientLight = new THREE.AmbientLight(0x404060);
+        scene.add(ambientLight);
+
+        // 主光源: 平行光模拟太阳
+        const dirLight = new THREE.DirectionalLight(0xffeedd, 1);
+        dirLight.position.set(5, 12, 8);
+        dirLight.castShadow = true;
+        dirLight.receiveShadow = true;
+        // 优化阴影范围
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        const d = 10;
+        dirLight.shadow.camera.left = -d;
+        dirLight.shadow.camera.right = d;
+        dirLight.shadow.camera.top = d;
+        dirLight.shadow.camera.bottom = -d;
+        dirLight.shadow.camera.near = 1;
+        dirLight.shadow.camera.far = 20;
+        scene.add(dirLight);
+
+        // 辅助背光
+        const backLight = new THREE.DirectionalLight(0x4466ff, 0.3);
+        backLight.position.set(-3, 1, -5);
+        scene.add(backLight);
+
+        // 可选: 显示光源位置辅助 (调试时可取消注释)
+        // const helper = new THREE.DirectionalLightHelper(dirLight, 1);
+        // scene.add(helper);
+
+        // ----- 4. 地面 -----
+        const groundGeometry = new THREE.CircleGeometry(5, 32);
+        const groundMaterial = new THREE.MeshStandardMaterial({
+            color: 0x2c3e50,
+            roughness: 0.7,
+            metalness: 0.1,
+            side: THREE.DoubleSide
+        });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -0.01; // 稍微下移，让方块看起来在地面上
+        ground.receiveShadow = true;
+        ground.name = 'ground'; // 便于射线检测识别
+        scene.add(ground);
+
+        // 添加网格辅助线，增强空间感 (放在地面稍上方，避免深度冲突)
+        const gridHelper = new THREE.GridHelper(10, 20, 0x88ccff, 0x445566);
+        gridHelper.position.y = 0;
+        scene.add(gridHelper);
+
+        // ----- 5. 初始方块 (一个起始例子) -----
+        const blocks = []; // 存储所有方块，用于统计和交互
+
+        function createBlock(x, y, z, color = null) {
+            // 随机颜色 或 指定颜色
+            const hue = color !== null ? color : Math.random();
+            const blockColor = new THREE.Color().setHSL(hue, 0.8, 0.6);
+            
+            // 随机大小，让花园更自然 (0.4 ~ 0.9)
+            const size = 0.5 + Math.random() * 0.4;
+            const geometry = new THREE.BoxGeometry(size, size, size);
+            const material = new THREE.MeshStandardMaterial({
+                color: blockColor,
+                roughness: 0.3,
+                metalness: 0.1,
+                emissive: new THREE.Color().setHSL(hue, 0.8, 0.1), // 微弱的自发光增加趣味
+            });
+            const block = new THREE.Mesh(geometry, material);
+            block.position.set(x, y + size/2, z); // 让方块底部贴地
+            block.castShadow = true;
+            block.receiveShadow = true;
+            
+            // 存储一个自定义属性，方便点击时获取颜色
+            block.userData = { color: blockColor.getHex() };
+            
+            return block;
+        }
+
+        // 在中心附近添加几个初始方块
+        const initPositions = [
+            [-1, 0, 0, 0.0], [1, 0, 0, 0.6], [0, 0, -1, 0.3], [0.8, 0, 1.2, 0.8]
+        ];
+        initPositions.forEach(([x, y, z, hue]) => {
+            const block = createBlock(x, y, z, hue);
+            scene.add(block);
+            blocks.push(block);
+        });
+
+        // 更新方块数量显示
+        function updateStats() {
+            document.getElementById('blockCount').textContent = blocks.length;
+        }
+        updateStats();
+
+        // ----- 6. 点击交互: 射线检测添加方块 -----
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        function onPointerClick(event) {
+            // 计算鼠标位置归一化坐标 (-1 到 1)
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+
+            // 检测所有可交互物体: 地面 + 已有方块
+            const targets = [ground, ...blocks];
+            const intersects = raycaster.intersectObjects(targets);
+
+            if (intersects.length > 0) {
+                // 取第一个被点击的物体
+                const hit = intersects[0];
+                const hitObject = hit.object;
+                
+                // 计算新方块的位置: 在点击点上方叠加
+                let x = hit.point.x;
+                let z = hit.point.z;
+                let y = 0; // 默认在地面高度
+
+                // 如果点击的是方块，则在其上方叠加
+                if (blocks.includes(hitObject)) {
+                    // 在点击的方块上方叠加，位置是点击方块的上表面
+                    // 获取方块包围盒，计算上表面Y
+                    const box = new THREE.Box3().setFromObject(hitObject);
+                    const size = new THREE.Vector3();
+                    box.getSize(size);
+                    y = box.max.y; // 上表面Y坐标
+                    
+                    // 为了更精确，限制点击范围在方块顶面中心附近，防止偏移太远
+                    // 这里简单处理：使用点击点的x和z，但y取上表面
+                    // 但为防止点击侧面时在侧面外生成，我们约束x,z在方块范围内
+                    const halfSize = size.x / 2;
+                    // 限制x,z在方块顶面范围内 (但允许轻微超出，视觉上更自然)
+                    x = Math.min(Math.max(x, hitObject.position.x - halfSize * 0.8), hitObject.position.x + halfSize * 0.8);
+                    z = Math.min(Math.max(z, hitObject.position.z - halfSize * 0.8), hitObject.position.z + halfSize * 0.8);
+                } else if (hitObject === ground) {
+                    // 点击地面，y=0，且x,z就是点击点
+                    y = 0;
+                }
+
+                // 随机生成鲜艳的颜色
+                const newColor = Math.random();
+                const newBlock = createBlock(x, y, z, newColor);
+                scene.add(newBlock);
+                blocks.push(newBlock);
+                updateStats();
+
+                // 小动画反馈：新方块弹跳效果 (使用简单动画循环)
+                newBlock.scale.set(0.1, 0.1, 0.1);
+                const targetScale = 1;
+                const startTime = Date.now();
+                const duration = 300; // 毫秒
+                function bounceAnimation() {
+                    const elapsed = Date.now() - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    // easeOutBack 弹性效果
+                    const c1 = 1.70158;
+                    const c3 = c1 + 1;
+                    const val = 1 + c3 * Math.pow(progress - 1, 3) + c1 * Math.pow(progress - 1, 2);
+                    const scale = 0.1 + (targetScale - 0.1) * val;
+                    newBlock.scale.set(scale, scale, scale);
+                    if (progress < 1) {
+                        requestAnimationFrame(bounceAnimation);
+                    } else {
+                        newBlock.scale.set(1, 1, 1);
+                    }
+                }
+                bounceAnimation();
+            }
+        }
+
+        // 绑定点击事件
+        renderer.domElement.addEventListener('click', onPointerClick);
+
+        // ----- 7. 窗口自适应 -----
+        window.addEventListener('resize', onWindowResize, false);
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // ----- 8. 动画循环 (渲染) -----
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // 更新控制器 (支持阻尼惯性)
+            controls.update();
+
+            // 渲染场景
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        // 简单的控制台提示
+        console.log('🌟 Three.js 乐高花园已启动！点击地面或方块添加彩色积木。');
+    </script>
+</body>
+</html>
