@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Three.js 加载 Blender 模型</title>
+    <style>
+        * { margin: 0; padding: 0; }
+        body { 
+            overflow: hidden; 
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #1a1a2e;
+        }
+        
+        /* ----- 加载进度条 ----- */
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #1a1a2e;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 0.8s ease;
+        }
+        #loading-screen.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .loader {
+            width: 200px;
+            height: 4px;
+            background: #2a2a4a;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 20px;
+        }
+        .loader-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #4facfe, #00f2fe);
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+        #loading-text {
+            color: #aaa;
+            font-size: 16px;
+            letter-spacing: 2px;
+            margin-top: 12px;
+        }
+        
+        /* ----- 提示信息 ----- */
+        #info {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255, 255, 255, 0.6);
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px 24px;
+            border-radius: 20px;
+            font-size: 14px;
+            backdrop-filter: blur(10px);
+            pointer-events: none;
+            z-index: 100;
+            white-space: nowrap;
+        }
+        
+        /* ----- 模型信息面板 ----- */
+        #model-info {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: #fff;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 16px 20px;
+            border-radius: 12px;
+            font-size: 13px;
+            line-height: 1.8;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            min-width: 160px;
+            z-index: 100;
+            display: none;
+        }
+        #model-info .label { color: #888; }
+        #model-info .value { color: #4facfe; font-weight: 600; }
+    </style>
+</head>
+<body>
+
+    <!-- 加载屏幕 -->
+    <div id="loading-screen">
+        <div style="font-size: 48px; margin-bottom: 10px;">🚀</div>
+        <div style="color: #fff; font-size: 20px; font-weight: 300;">加载模型中</div>
+        <div class="loader">
+            <div class="loader-bar" id="loader-bar"></div>
+        </div>
+        <div id="loading-text">0%</div>
+    </div>
+
+    <!-- 信息提示 -->
+    <div id="info">🖱️ 拖拽旋转 · 滚轮缩放 · 点击模型查看信息</div>
+    
+    <!-- 模型信息面板 -->
+    <div id="model-info">
+        <div><span class="label">模型名称</span><br><span class="value" id="model-name">-</span></div>
+        <div><span class="label">顶点数</span><br><span class="value" id="vertex-count">-</span></div>
+        <div><span class="label">三角形数</span><br><span class="value" id="triangle-count">-</span></div>
+    </div>
+
+    <!-- ============ JavaScript 部分 ============ -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        // ----- 1. 导入所需模块 -----
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+
+        // ----- 2. DOM 引用 -----
+        const loadingScreen = document.getElementById('loading-screen');
+        const loaderBar = document.getElementById('loader-bar');
+        const loadingText = document.getElementById('loading-text');
+        const modelInfo = document.getElementById('model-info');
+        const modelNameEl = document.getElementById('model-name');
+        const vertexCountEl = document.getElementById('vertex-count');
+        const triangleCountEl = document.getElementById('triangle-count');
+
+        // ----- 3. 场景、相机、渲染器 -----
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a2e);
+
+        // 添加一点雾效，增强景深感
+        scene.fog = new THREE.Fog(0x1a1a2e, 10, 30);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(5, 3, 8);
+        camera.lookAt(0, 0, 0);
+
+        const renderer = new THREE.WebGLRenderer({ 
+            antialias: true,
+            alpha: false
+        });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.2;
+        document.body.appendChild(renderer.domElement);
+
+        // ----- 4. 轨道控制器 -----
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.08;
+        controls.minDistance = 2;
+        controls.maxDistance = 20;
+        controls.maxPolarAngle = Math.PI / 2.1;
+        controls.target.set(0, 0.5, 0);
+
+        // ----- 5. 灯光系统 -----
+        // 环境光
+        const ambientLight = new THREE.AmbientLight(0x404060, 0.6);
+        scene.add(ambientLight);
+
+        // 半球光 - 模拟天空和地面的漫反射
+        const hemiLight = new THREE.HemisphereLight(0x87ceeb, 0x3a3a3a, 0.8);
+        scene.add(hemiLight);
+
+        // 主平行光 - 带阴影
+        const dirLight = new THREE.DirectionalLight(0xffeedd, 1.8);
+        dirLight.position.set(5, 10, 7);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 25;
+        dirLight.shadow.camera.left = -10;
+        dirLight.shadow.camera.right = 10;
+        dirLight.shadow.camera.top = 10;
+        dirLight.shadow.camera.bottom = -10;
+        scene.add(dirLight);
+
+        // 辅助背光
+        const fillLight = new THREE.DirectionalLight(0x4488ff, 0.5);
+        fillLight.position.set(-3, 1, -5);
+        scene.add(fillLight);
+
+        // 底部补光
+        const rimLight = new THREE.DirectionalLight(0xff8844, 0.3);
+        rimLight.position.set(0, -2, 3);
+        scene.add(rimLight);
+
+        // (可选) 显示光源位置辅助 - 调试时可取消注释
+        // const helper = new THREE.DirectionalLightHelper(dirLight, 1);
+        // scene.add(helper);
+
+        // ----- 6. 环境地面（半透明圆盘，用于接收阴影）-----
+        const groundGeometry = new THREE.CircleGeometry(8, 64);
+        const groundMaterial = new THREE.MeshStandardMaterial({
+            color: 0x1a1a2e,
+            roughness: 0.8,
+            metalness: 0.1,
+            transparent: true,
+            opacity: 0.6,
+            side: THREE.DoubleSide
+        });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -0.01;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // 网格辅助（增强空间感）
+        const gridHelper = new THREE.GridHelper(8, 16, 0x4facfe, 0x2a2a4a);
+        gridHelper.position.y = 0;
+        scene.add(gridHelper);
+
+        // ----- 7. 模型加载 -----
+        // 使用一个公开的测试模型（Blender 的 Suzanne 猴子 + 一些几何体）
+        // 你也可以替换为自己的模型 URL
+        const MODEL_URL = 'https://threejs.org/examples/models/gltf/DamagedHelmet/glTF/DamagedHelmet.gltf';
+        // 备选模型（Suzanne 猴子）:
+        // const MODEL_URL = 'https://threejs.org/examples/models/gltf/Suzanne/Suzanne.gltf';
+
+        // 创建加载器
+        const loader = new GLTFLoader();
+        
+        // 配置 DRACO 压缩解码器（如果模型使用 Draco 压缩）
+        const dracoLoader = new DRACOLoader();
+        dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.5/');
+        loader.setDRACOLoader(dracoLoader);
+
+        // 存储加载的模型
+        let loadedModel = null;
+        let modelMeshes = [];
+
+        // 开始加载
+        loader.load(
+            MODEL_URL,
+            // ----- 加载成功回调 -----
+            (gltf) => {
+                loadedModel = gltf.scene;
+                
+                // 处理模型：统一缩放、开启阴影、收集信息
+                loadedModel.scale.set(1.2, 1.2, 1.2);
+                loadedModel.position.y = 0;
+                
+                // 遍历所有子节点，开启阴影，收集网格信息
+                let vertexCount = 0;
+                let triangleCount = 0;
+                const meshNames = [];
+                
+                loadedModel.traverse((child) => {
+                    // 开启阴影
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                        
+                        // 统计顶点和三角形
+                        const geo = child.geometry;
+                        if (geo.index) {
+                            triangleCount += geo.index.count / 3;
+                        } else if (geo.attributes.position) {
+                            triangleCount += geo.attributes.position.count / 3;
+                        }
+                        if (geo.attributes.position) {
+                            vertexCount += geo.attributes.position.count;
+                        }
+                        
+                        // 记录网格名称
+                        if (child.name) {
+                            meshNames.push(child.name);
+                        }
+                    }
+                });
+                
+                // 添加到场景
+                scene.add(loadedModel);
+                
+                // 更新模型信息面板
+                modelNameEl.textContent = meshNames.length > 0 ? meshNames.join(', ') : '未命名模型';
+                vertexCountEl.textContent = vertexCount.toLocaleString();
+                triangleCountEl.textContent = Math.round(triangleCount).toLocaleString();
+                modelInfo.style.display = 'block';
+                
+                // 隐藏加载屏幕
+                setTimeout(() => {
+                    loadingScreen.classList.add('hidden');
+                }, 400);
+                
+                console.log('✅ 模型加载成功！');
+                console.log(`📊 顶点数: ${vertexCount}, 三角形数: ${Math.round(triangleCount)}`);
+            },
+            
+            // ----- 加载进度回调 -----
+            (progress) => {
+                const percent = (progress.loaded / progress.total * 100);
+                loaderBar.style.width = percent + '%';
+                loadingText.textContent = Math.round(percent) + '%';
+            },
+            
+            // ----- 加载失败回调 -----
+            (error) => {
+                console.error('❌ 模型加载失败:', error);
+                loadingText.textContent = '加载失败，请刷新重试';
+                loadingText.style.color = '#ff6b6b';
+                loaderBar.style.background = '#ff6b6b';
+                
+                // 显示错误信息
+                const errorDiv = document.createElement('div');
+                errorDiv.style.color = '#ff6b6b';
+                errorDiv.style.marginTop = '20px';
+                errorDiv.style.fontSize = '14px';
+                errorDiv.textContent = '提示：请检查网络，或更换模型 URL';
+                document.querySelector('#loading-screen > div:last-child').after(errorDiv);
+            }
+        );
+
+        // ----- 8. 模型交互：点击显示信息 -----
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+
+        renderer.domElement.addEventListener('click', (event) => {
+            if (!loadedModel) return;
+            
+            // 计算 NDC 坐标
+            pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+            pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            raycaster.setFromCamera(pointer, camera);
+            
+            // 获取模型中所有 Mesh
+            const meshes = [];
+            loadedModel.traverse((child) => {
+                if (child.isMesh) {
+                    meshes.push(child);
+                }
+            });
+            
+            const intersects = raycaster.intersectObjects(meshes);
+            
+            if (intersects.length > 0) {
+                const hit = intersects[0].object;
+                // 闪烁反馈：临时改变颜色
+                const originalColor = hit.material.color.getHex();
+                hit.material.color.setHex(0x4facfe);
+                setTimeout(() => {
+                    hit.material.color.setHex(originalColor);
+                }, 300);
+                
+                console.log(`🖱️ 点击了: ${hit.name || '未命名网格'}`);
+                console.log(`  位置: (${hit.position.x.toFixed(2)}, ${hit.position.y.toFixed(2)}, ${hit.position.z.toFixed(2)})`);
+            }
+        });
+
+        // 鼠标悬停改变光标
+        renderer.domElement.addEventListener('pointermove', (event) => {
+            if (!loadedModel) return;
+            
+            pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+            pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            raycaster.setFromCamera(pointer, camera);
+            
+            const meshes = [];
+            loadedModel.traverse((child) => {
+                if (child.isMesh) meshes.push(child);
+            });
+            
+            const intersects = raycaster.intersectObjects(meshes);
+            renderer.domElement.style.cursor = intersects.length > 0 ? 'pointer' : 'default';
+        });
+
+        // ----- 9. 窗口自适应 -----
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // ----- 10. 动画循环 -----
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            controls.update();
+            
+            // 让模型轻微旋转（可以注释掉）
+            if (loadedModel) {
+                // loadedModel.rotation.y += 0.001;
+            }
+            
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        console.log('🌟 Three.js 模型加载器已启动！');
+        console.log('📦 加载模型:', MODEL_URL);
+    </script>
+</body>
+</html>
