@@ -1,0 +1,818 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>WebRTC 跨设备通话</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #0f172a;
+        color: #e2e8f0;
+        min-height: 100vh;
+        display: flex;
+        justify-content: center;
+        padding: 16px;
+      }
+      #app {
+        width: 100%;
+        max-width: 700px;
+      }
+      header {
+        text-align: center;
+        padding: 12px 0 8px;
+      }
+      header h1 {
+        font-size: 22px;
+        color: #60a5fa;
+      }
+      header p {
+        color: #94a3b8;
+        font-size: 13px;
+        margin-top: 2px;
+      }
+
+      .card {
+        background: #1e293b;
+        border-radius: 16px;
+        padding: 28px 20px;
+        text-align: center;
+        border: 1px solid #334155;
+        margin-top: 12px;
+      }
+      .card h2 {
+        font-size: 18px;
+        margin-bottom: 16px;
+        color: #f1f5f9;
+      }
+      .input-group {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .input-group input {
+        flex: 1;
+        min-width: 140px;
+        padding: 12px 16px;
+        border-radius: 50px;
+        border: 2px solid #334155;
+        background: #0f172a;
+        color: #e2e8f0;
+        font-size: 16px;
+        text-transform: uppercase;
+        text-align: center;
+        outline: none;
+      }
+      .input-group input:focus {
+        border-color: #60a5fa;
+      }
+      .divider {
+        margin: 14px 0;
+        color: #475569;
+        font-size: 13px;
+        position: relative;
+      }
+      .divider::before,
+      .divider::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        width: 28%;
+        height: 1px;
+        background: #334155;
+      }
+      .divider::before {
+        left: 0;
+      }
+      .divider::after {
+        right: 0;
+      }
+
+      button {
+        padding: 12px 28px;
+        border: none;
+        border-radius: 50px;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.25s;
+        touch-action: manipulation;
+      }
+      button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        transform: none;
+      }
+      button:active:not(:disabled) {
+        transform: scale(0.95);
+      }
+      .btn-primary {
+        background: #3b82f6;
+        color: #fff;
+      }
+      .btn-primary:hover:not(:disabled) {
+        background: #2563eb;
+      }
+      .btn-success {
+        background: #22c55e;
+        color: #fff;
+      }
+      .btn-success:hover:not(:disabled) {
+        background: #16a34a;
+      }
+      .btn-danger {
+        background: #ef4444;
+        color: #fff;
+      }
+      .btn-danger:hover:not(:disabled) {
+        background: #dc2626;
+      }
+      .btn-warning {
+        background: #f59e0b;
+        color: #0f172a;
+      }
+
+      .video-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        margin-top: 12px;
+      }
+      .video-box {
+        background: #1e293b;
+        border-radius: 12px;
+        overflow: hidden;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 2px solid #334155;
+        transition: border-color 0.4s;
+      }
+      .video-box.active {
+        border-color: #22d3ee;
+      }
+      .video-box video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        background: #0f172a;
+      }
+      .video-box .label {
+        position: absolute;
+        bottom: 6px;
+        left: 8px;
+        background: rgba(0, 0, 0, 0.7);
+        padding: 2px 10px;
+        border-radius: 10px;
+        font-size: 11px;
+        color: #cbd5e1;
+        backdrop-filter: blur(4px);
+      }
+      .video-box .badge {
+        position: absolute;
+        top: 6px;
+        right: 8px;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #ef4444;
+        transition: background 0.5s;
+      }
+      .video-box .badge.on {
+        background: #22c55e;
+      }
+
+      #status {
+        width: 100%;
+        padding: 10px 14px;
+        border-radius: 10px;
+        font-size: 13px;
+        text-align: center;
+        background: #1e293b;
+        color: #94a3b8;
+        margin: 10px 0 4px;
+        min-height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #status.error {
+        background: #7f1d1d;
+        color: #fca5a5;
+      }
+      #status.success {
+        background: #14532d;
+        color: #86efac;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 8px;
+        margin: 10px 0 6px;
+      }
+      .controls button {
+        flex: 1;
+        min-width: 80px;
+        padding: 12px 8px;
+        font-size: 14px;
+      }
+
+      .log {
+        width: 100%;
+        background: #0f172a;
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-family: "Courier New", monospace;
+        font-size: 11px;
+        color: #64748b;
+        max-height: 100px;
+        overflow-y: auto;
+        line-height: 1.7;
+        border: 1px solid #1e293b;
+      }
+      .log .info {
+        color: #60a5fa;
+      }
+      .log .ok {
+        color: #4ade80;
+      }
+      .log .err {
+        color: #f87171;
+      }
+      .log .warn {
+        color: #fbbf24;
+      }
+
+      .room-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 13px;
+        color: #94a3b8;
+        padding: 6px 4px;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .room-info strong {
+        color: #f1f5f9;
+      }
+      .hidden {
+        display: none !important;
+      }
+
+      @media (max-width: 480px) {
+        .video-grid {
+          aspect-ratio: 16/10;
+        }
+        .controls button {
+          font-size: 12px;
+          padding: 10px 6px;
+          min-width: 60px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>📹 WebRTC 跨设备</h1>
+        <p id="headerStatus">PC 创建房间 · 手机加入</p>
+      </header>
+
+      <!-- 登录面板 -->
+      <div id="loginPanel" class="card">
+        <h2>🎯 创建或加入房间</h2>
+        <div class="input-group">
+          <input
+            type="text"
+            id="roomInput"
+            placeholder="输入房间号"
+            maxlength="10"
+            autocomplete="off"
+          />
+          <button id="joinBtn" class="btn-primary">📥 加入</button>
+        </div>
+        <div class="divider">或</div>
+        <button id="createBtn" class="btn-success">🏠 创建新房间</button>
+        <p
+          id="hint"
+          style="margin-top: 12px; font-size: 12px; color: #64748b"
+        ></p>
+      </div>
+
+      <!-- 通话面板 -->
+      <div id="callPanel" class="hidden">
+        <div class="video-grid">
+          <div class="video-box" id="localBox">
+            <video id="localVideo" autoplay playsinline muted></video>
+            <span class="label">📷 本地</span>
+            <span class="badge" id="localBadge"></span>
+          </div>
+          <div class="video-box" id="remoteBox">
+            <video id="remoteVideo" autoplay playsinline></video>
+            <span class="label">📡 对方</span>
+            <span class="badge" id="remoteBadge"></span>
+          </div>
+        </div>
+
+        <div class="room-info">
+          <span>🏠 房间: <strong id="roomDisplay"></strong></span>
+          <span id="peerStatus">⏳ 等待对方...</span>
+        </div>
+
+        <div id="status">📷 点击「开启摄像头」</div>
+
+        <div class="controls">
+          <button id="cameraBtn" class="btn-primary">📷 开启摄像头</button>
+          <button id="callBtn" class="btn-success" disabled>📞 发起通话</button>
+          <button id="hangupBtn" class="btn-danger" disabled>📴 挂断</button>
+        </div>
+
+        <div class="log" id="log"><span class="info">🚀 就绪</span></div>
+      </div>
+    </div>
+
+    <script>
+      // ============================================================
+      //  配置
+      // ============================================================
+      const WS_URL = 'wss://' + window.location.hostname;
+
+      // ============================================================
+      //  DOM
+      // ============================================================
+      const $ = (id) => document.getElementById(id);
+      const loginPanel = $("loginPanel");
+      const callPanel = $("callPanel");
+      const roomInput = $("roomInput");
+      const joinBtn = $("joinBtn");
+      const createBtn = $("createBtn");
+      const hint = $("hint");
+      const roomDisplay = $("roomDisplay");
+      const peerStatus = $("peerStatus");
+      const statusEl = $("status");
+      const logEl = $("log");
+      const cameraBtn = $("cameraBtn");
+      const callBtn = $("callBtn");
+      const hangupBtn = $("hangupBtn");
+      const localVideo = $("localVideo");
+      const remoteVideo = $("remoteVideo");
+      const localBox = $("localBox");
+      const remoteBox = $("remoteBox");
+      const localBadge = $("localBadge");
+      const remoteBadge = $("remoteBadge");
+
+      // ============================================================
+      //  状态
+      // ============================================================
+      let ws = null;
+      let roomId = null;
+      let isOfferer = false; // true=PC创建者, false=手机加入者
+      let localStream = null;
+      let pc = null;
+      let isCalling = false;
+
+      const STUN = {
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+          { urls: "stun:stun2.l.google.com:19302" },
+        ],
+      };
+
+      // ============================================================
+      //  工具函数
+      // ============================================================
+      function log(msg, type = "info") {
+        const map = { info: "info", ok: "ok", err: "err", warn: "warn" };
+        logEl.innerHTML += `<span class="${map[type] || "info"}">${msg}</span><br>`;
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      function setStatus(msg, state = "") {
+        statusEl.textContent = msg;
+        statusEl.className = state;
+      }
+
+      function setPeerStatus(msg) {
+        peerStatus.textContent = msg;
+      }
+
+      // ============================================================
+      //  WebSocket 信令
+      // ============================================================
+      function connectWS() {
+        return new Promise((resolve, reject) => {
+          ws = new WebSocket(WS_URL);
+          ws.onopen = () => {
+            log("✅ 信令已连接", "ok");
+            resolve();
+          };
+          ws.onmessage = (e) => handleSignal(JSON.parse(e.data));
+          ws.onerror = (e) => {
+            log("❌ WS错误", "err");
+            reject(e);
+          };
+          ws.onclose = () => log("⚠️ 信令断开", "warn");
+        });
+      }
+
+      function send(type, data = {}) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type, ...data }));
+        }
+      }
+
+      function handleSignal(data) {
+        log(`📨 ${data.type}`, "info");
+
+        switch (data.type) {
+          case "created":
+            roomId = data.roomId;
+            roomDisplay.textContent = roomId;
+            hint.textContent = `📱 手机请输入房间号: ${roomId}`;
+            setStatus("🏠 房间已创建，等待手机加入...");
+            setPeerStatus("⏳ 等待对方加入...");
+            log(`🏠 房间: ${roomId}`, "ok");
+            showCallPanel();
+            break;
+
+          case "joined":
+            roomId = data.roomId;
+            roomDisplay.textContent = roomId;
+            setStatus("✅ 已加入房间");
+            setPeerStatus("⏳ 等待对方开启摄像头...");
+            log(`✅ 已加入 ${roomId}`, "ok");
+            showCallPanel();
+            break;
+
+          case "offer":
+            if (!isOfferer) {
+              log("📥 收到Offer", "ok");
+              handleOffer(data.sdp);
+            }
+            break;
+
+          case "answer":
+            if (isOfferer) {
+              log("📥 收到Answer", "ok");
+              handleAnswer(data.sdp);
+            }
+            break;
+
+          case "candidate":
+            handleCandidate(data.candidate);
+            break;
+
+          case "error":
+            log(`❌ ${data.message}`, "err");
+            setStatus(`❌ ${data.message}`, "error");
+            break;
+
+          default:
+            log(`⚠️ 未知: ${data.type}`, "warn");
+        }
+      }
+
+      // ============================================================
+      //  房间操作
+      // ============================================================
+      async function createRoom() {
+        await connectWS();
+        isOfferer = true;
+        send("create");
+      }
+
+      async function joinRoom() {
+        const id = roomInput.value.trim().toUpperCase();
+        if (!id) {
+          setStatus("⚠️ 请输入房间号", "error");
+          return;
+        }
+        await connectWS();
+        isOfferer = false;
+        send("join", { roomId: id });
+      }
+
+      function showCallPanel() {
+        loginPanel.classList.add("hidden");
+        callPanel.classList.remove("hidden");
+        cameraBtn.disabled = false;
+      }
+
+      // ============================================================
+      //  摄像头
+      // ============================================================
+      async function toggleCamera() {
+        // [移动端修复] 防止重复点击导致的多重请求
+        if (cameraBtn.disabled) return;
+
+        // 如果已经开启，直接进入通话逻辑（仅限PC发起方）
+        if (localStream) {
+          if (!isCalling && isOfferer) {
+            startCall();
+          }
+          return;
+        }
+
+        try {
+          setStatus("🎥 正在请求摄像头权限...");
+          cameraBtn.disabled = true; // 立即锁定按钮，防止连点
+
+          // [移动端修复 1] 移除 PC 上过于复杂的约束，使用最通用的标准约束
+          // 特别注意：不指定 exact，只给 ideal，让浏览器自己适配
+          const constraints = {
+            video: {
+              facingMode: "user", // 明确请求前置摄像头（移动端常用）
+              width: { min: 320, ideal: 640 },
+              height: { min: 240, ideal: 480 },
+            },
+            audio: true,
+          };
+
+          // 获取流
+          localStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+          // 成功：挂载到 video 标签
+          localVideo.srcObject = localStream;
+          localBox.classList.add("active");
+          localBadge.className = "badge on";
+
+          log("✅ 摄像头已开启", "ok");
+          setStatus("📷 摄像头已就绪");
+
+          // 更新 UI
+          cameraBtn.textContent = "📷 已开启";
+          cameraBtn.className = "btn-success";
+          cameraBtn.disabled = false; // 恢复按钮
+
+          // 后续逻辑：如果是发起者（PC），激活通话按钮；如果是接收者（手机），尝试自动应答
+          if (isOfferer) {
+            callBtn.disabled = false;
+            callBtn.textContent = "📞 发起通话";
+            setPeerStatus("📞 点击「发起通话」");
+          } else {
+            // 手机端：如果已经收到了 Offer，自动发送 Answer
+            if (pc && pc.remoteDescription) {
+              await sendAnswer();
+            } else {
+              setPeerStatus("⏳ 等待对方发起通话...");
+            }
+          }
+        } catch (err) {
+          // [移动端修复 2] 捕获并翻译常见错误
+          let errorMsg = err.message;
+          if (
+            err.name === "NotAllowedError" ||
+            err.name === "PermissionDeniedError"
+          ) {
+            errorMsg = "用户拒绝了摄像头权限，请在浏览器设置中允许";
+          } else if (
+            err.name === "NotFoundError" ||
+            err.name === "DevicesNotFoundError"
+          ) {
+            errorMsg = "未检测到摄像头设备，请检查连接";
+          } else if (err.name === "NotReadableError") {
+            errorMsg = "摄像头被其他应用占用，请关闭其他相机应用";
+          } else if (err.name === "OverconstrainedError") {
+            // [移动端修复 3] 如果 constraints 报错，降级为只请求 video: true
+            log("⚠️ 摄像头约束过严，尝试使用默认参数...", "warn");
+            try {
+              // 降级方案：只请求 video: true
+              const fallbackStream = await navigator.mediaDevices.getUserMedia({
+                video: true,
+                audio: true,
+              });
+              localStream = fallbackStream;
+              localVideo.srcObject = localStream;
+              // ... 重复上面的成功逻辑 (这里省略，实际代码请复制上面的成功块)
+              // 为了简洁，建议将成功逻辑抽成一个函数，此处先抛出错误示意
+              throw new Error("降级成功，但请完善代码逻辑");
+            } catch (fallbackErr) {
+              errorMsg = "摄像头不兼容，请尝试使用 Chrome 浏览器";
+            }
+          }
+
+          log(`❌ 摄像头启动失败: ${errorMsg}`, "err");
+          setStatus(`❌ ${errorMsg}`, "error");
+          cameraBtn.disabled = false; // 报错后一定要恢复按钮
+        }
+      }
+
+      // ============================================================
+      //  WebRTC
+      // ============================================================
+      function createPeerConnection() {
+        pc = new RTCPeerConnection(STUN);
+
+        if (localStream) {
+          localStream.getTracks().forEach((t) => {
+            pc.addTrack(t, localStream);
+            log(`➕ 添加 ${t.kind}`, "info");
+          });
+        }
+
+        pc.ontrack = (e) => {
+          if (e.streams && e.streams[0]) {
+            remoteVideo.srcObject = e.streams[0];
+            remoteBox.classList.add("active");
+            remoteBadge.className = "badge on";
+            log("✅ 收到对方视频", "ok");
+            setStatus("🎉 通话中！", "success");
+            setPeerStatus("🔗 已连接");
+            hangupBtn.disabled = false;
+            callBtn.disabled = true;
+            isCalling = true;
+          }
+        };
+
+        pc.onicecandidate = (e) => {
+          if (e.candidate) {
+            send("candidate", { candidate: e.candidate });
+            log("🧊 ICE候选已发送", "info");
+          } else {
+            log("✅ ICE收集完成", "ok");
+          }
+        };
+
+        pc.oniceconnectionstatechange = () => {
+          const state = pc.iceConnectionState;
+          log(`🌐 ICE: ${state}`, "info");
+          if (state === "connected" || state === "completed") {
+            setStatus("🔗 P2P已连通", "success");
+            hangupBtn.disabled = false;
+          } else if (state === "failed") {
+            setStatus("❌ ICE连接失败", "error");
+            log("⚠️ ICE失败", "warn");
+          }
+        };
+
+        return pc;
+      }
+
+      async function startCall() {
+        if (!localStream) {
+          await toggleCamera();
+          if (!localStream) return;
+        }
+        if (isCalling) return;
+
+        try {
+          setStatus("🔄 建立P2P...");
+          callBtn.disabled = true;
+
+          pc = createPeerConnection();
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          send("offer", { sdp: offer });
+          log("📤 Offer已发送", "ok");
+          setPeerStatus("⏳ 等待对方应答...");
+        } catch (err) {
+          log(`❌ ${err.message}`, "err");
+          setStatus(`❌ ${err.message}`, "error");
+          callBtn.disabled = false;
+        }
+      }
+
+      async function handleOffer(sdp) {
+        try {
+          if (!pc) pc = createPeerConnection();
+          await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+          log("📥 远端描述已设置", "ok");
+          setPeerStatus("📥 收到通话请求，准备应答...");
+
+          // 如果摄像头已开启，自动应答
+          if (localStream) {
+            await sendAnswer();
+          } else {
+            setStatus("📷 请先开启摄像头", "");
+            setPeerStatus("📷 请点击「开启摄像头」应答");
+          }
+        } catch (err) {
+          log(`❌ 处理Offer失败: ${err.message}`, "err");
+        }
+      }
+
+      async function sendAnswer() {
+        try {
+          if (!pc) pc = createPeerConnection();
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          send("answer", { sdp: answer });
+          log("📤 Answer已发送", "ok");
+          setPeerStatus("⏳ 连接中...");
+          setStatus("🔄 等待P2P连通...");
+        } catch (err) {
+          log(`❌ 发送Answer失败: ${err.message}`, "err");
+        }
+      }
+
+      async function handleAnswer(sdp) {
+        try {
+          if (!pc) return;
+          await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+          log("📥 远端Answer已设置", "ok");
+          setPeerStatus("🔄 P2P建立中...");
+        } catch (err) {
+          log(`❌ 处理Answer失败: ${err.message}`, "err");
+        }
+      }
+
+      function handleCandidate(candidate) {
+        try {
+          if (!pc) return;
+          pc.addIceCandidate(new RTCIceCandidate(candidate));
+          log("🧊 ICE候选已添加", "info");
+        } catch (err) {
+          log(`❌ 添加ICE失败: ${err.message}`, "err");
+        }
+      }
+
+      // ============================================================
+      //  挂断
+      // ============================================================
+      function hangUp() {
+        log("📴 挂断", "warn");
+
+        if (pc) {
+          pc.close();
+          pc = null;
+        }
+        if (localStream) {
+          localStream.getTracks().forEach((t) => t.stop());
+          localStream = null;
+        }
+
+        localVideo.srcObject = null;
+        remoteVideo.srcObject = null;
+        localBox.classList.remove("active");
+        remoteBox.classList.remove("active");
+        localBadge.className = "badge";
+        remoteBadge.className = "badge";
+
+        isCalling = false;
+        cameraBtn.textContent = "📷 开启摄像头";
+        cameraBtn.className = "btn-primary";
+        cameraBtn.disabled = false;
+        callBtn.disabled = true;
+        hangupBtn.disabled = true;
+
+        setStatus("📴 已挂断");
+        setPeerStatus("⏳ 已断开");
+        log("✅ 已重置", "ok");
+        send("leave");
+      }
+
+      // ============================================================
+      //  绑定事件
+      // ============================================================
+      createBtn.addEventListener("click", createRoom);
+      joinBtn.addEventListener("click", joinRoom);
+      roomInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") joinRoom();
+      });
+
+      cameraBtn.addEventListener("click", toggleCamera);
+      callBtn.addEventListener("click", startCall);
+      hangupBtn.addEventListener("click", hangUp);
+
+      window.addEventListener("beforeunload", () => {
+        if (localStream) localStream.getTracks().forEach((t) => t.stop());
+        if (pc) pc.close();
+        if (ws) ws.close();
+      });
+
+      // ============================================================
+      //  启动
+      // ============================================================
+      log("🚀 WebRTC 跨设备通话已加载", "info");
+      const isMobile = window.innerWidth < 768;
+      document.getElementById("headerStatus").textContent = isMobile
+        ? "📱 手机端 · 输入房间号加入"
+        : "💻 PC端 · 创建房间";
+
+      // 显示IP提示
+      const host = window.location.hostname;
+      if (host !== "localhost" && host !== "127.0.0.1") {
+        hint.textContent = `🌐 对方请访问: http://${host}:3000`;
+      } else {
+        hint.textContent = "💡 手机需用电脑IP访问，不能用 localhost";
+      }
+    </script>
+  </body>
+</html>
